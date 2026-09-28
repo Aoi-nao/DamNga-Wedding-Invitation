@@ -112,7 +112,8 @@ const WeddingData = {
         "assets/images/gallery/closing-02.JPG",
         "assets/images/gallery/closing-03.JPG",
         "assets/images/gallery/closing-04.JPG",
-        "assets/images/gallery/closing-05.JPG"
+        "assets/images/gallery/closing-05.JPG",
+         "assets/images/gallery/closing-06.JPG"
     ],
     rsvp: {
         maxGuests: 5
