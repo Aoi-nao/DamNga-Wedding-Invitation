@@ -1358,55 +1358,118 @@ function initClosingGallery() {
 
     /*
      * ======================================================
-     * PRELOAD
-     *
-     * Chỉ tải ảnh trước khi người dùng đi tới
-     * Closing Gallery.
-     *
-     * Không tạo DOM.
-     * Không tạo layout.
-     * Không bật animation.
+     * STATE
      * ======================================================
      */
 
     let preloadStarted = false;
+    let preloadPromise = null;
+
     let initialized = false;
+    let animationStarted = false;
+
+
+    /*
+     * ======================================================
+     * PRELOAD
+     *
+     * Tải + decode ảnh trước khi Closing Gallery
+     * thực sự xuất hiện.
+     *
+     * Không tạo DOM.
+     * Không tạo layout.
+     * Không chạy animation.
+     * ======================================================
+     */
 
     const preloadImages = () => {
 
         if (preloadStarted) {
-            return;
+            return preloadPromise;
         }
 
         preloadStarted = true;
 
-        closingImages.forEach(
-            (imageSource) => {
+        const imagePromises =
+            closingImages
+                .filter(Boolean)
+                .map((imageSource) => {
 
-                if (!imageSource) {
-                    return;
-                }
+                    return new Promise((resolve) => {
 
-                const image =
-                    new Image();
+                        const image =
+                            new Image();
 
-                image.decoding =
-                    "async";
+                        image.decoding =
+                            "async";
 
-                image.src =
-                    imageSource;
+                        const finish = () => {
 
-            }
-        );
+                            if (
+                                typeof image.decode ===
+                                "function"
+                            ) {
+
+                                image.decode()
+                                    .catch(() => {})
+                                    .finally(resolve);
+
+                            } else {
+
+                                resolve();
+
+                            }
+
+                        };
+
+                        if (image.complete) {
+
+                            finish();
+
+                        } else {
+
+                            image.addEventListener(
+                                "load",
+                                finish,
+                                {
+                                    once: true
+                                }
+                            );
+
+                            image.addEventListener(
+                                "error",
+                                resolve,
+                                {
+                                    once: true
+                                }
+                            );
+
+                        }
+
+                        image.src =
+                            imageSource;
+
+                    });
+
+                });
+
+        preloadPromise =
+            Promise.all(imagePromises);
+
+        return preloadPromise;
 
     };
+
 
     /*
      * ======================================================
      * INITIALIZE
      *
-     * Chỉ tạo DOM khi Closing Gallery thực sự
-     * sắp xuất hiện.
+     * Tạo DOM sớm hơn hiện tại một chút để browser
+     * có thời gian chuẩn bị layout + ảnh trước khi
+     * người dùng thực sự nhìn thấy section.
+     *
+     * Animation CHƯA chạy ở đây.
      * ======================================================
      */
 
@@ -1422,6 +1485,7 @@ function initClosingGallery() {
          * Tạo 2 bộ ảnh giống nhau
          * để giữ infinite loop.
          */
+
         const imageSets = [
             closingImages,
             closingImages
@@ -1462,14 +1526,13 @@ function initClosingGallery() {
                             "async";
 
                         /*
-                         * Không dùng lazy cho bộ thứ hai.
+                         * Không dùng lazy.
                          *
-                         * Cả hai bộ đều dùng chung resource
-                         * đã được preload ở phía trên.
-                         *
-                         * Tránh browser trì hoãn ảnh trong
-                         * lúc animation đang chạy.
+                         * Ảnh đã được preload ở phía trên,
+                         * nên khi DOM xuất hiện browser có thể
+                         * dùng lại resource đã chuẩn bị.
                          */
+
                         image.loading =
                             "eager";
 
@@ -1496,37 +1559,101 @@ function initClosingGallery() {
             }
         );
 
-        /*
-         * Cho browser có một nhịp render layout
-         * rồi mới bật animation.
-         *
-         * KHÔNG chờ Promise.all().
-         * KHÔNG chờ toàn bộ ảnh decode.
-         */
-        requestAnimationFrame(() => {
+    };
+
+
+    /*
+     * ======================================================
+     * START ANIMATION
+     *
+     * Chỉ bật animation khi ảnh preload/decode đã xong.
+     *
+     * Có fallback để không bị treo nếu người dùng
+     * scroll cực nhanh hoặc browser không hoàn tất
+     * preload đúng thời điểm.
+     * ======================================================
+     */
+
+    const startAnimation = () => {
+
+        if (animationStarted) {
+            return;
+        }
+
+        animationStarted = true;
+
+        const showGallery = () => {
 
             requestAnimationFrame(() => {
 
-                track.classList.add(
-                    "is-loaded"
-                );
+                requestAnimationFrame(() => {
+
+                    track.classList.add(
+                        "is-loaded"
+                    );
+
+                });
 
             });
 
-        });
+        };
+
+        if (!preloadPromise) {
+
+            showGallery();
+            return;
+
+        }
+
+        let fallbackTimer = null;
+
+        const fallback =
+            () => {
+
+                if (fallbackTimer) {
+                    clearTimeout(
+                        fallbackTimer
+                    );
+                }
+
+                showGallery();
+
+            };
+
+        /*
+         * Bình thường: chờ preload + decode hoàn tất.
+         */
+
+        preloadPromise.then(
+            fallback,
+            fallback
+        );
+
+        /*
+         * Nếu người dùng scroll rất nhanh,
+         * không để gallery chờ vô thời hạn.
+         *
+         * 800ms là fallback an toàn:
+         * bình thường Promise sẽ hoàn thành trước;
+         * chỉ dùng fallback trong trường hợp browser
+         * xử lý ảnh chậm bất thường.
+         */
+
+        fallbackTimer =
+            setTimeout(
+                fallback,
+                800
+            );
 
     };
+
 
     /*
      * ======================================================
      * PRELOAD KHI ĐANG Ở WISHES
      *
-     * Wishes nằm ngay trước Closing Gallery.
-     *
-     * Vì vậy ảnh được tải nền trước khi người dùng
-     * thực sự nhìn thấy Closing Gallery.
-     *
-     * Không tải ngay từ lúc mở website.
+     * Giữ nguyên chiến lược hiện tại:
+     * không tải Closing Gallery ngay khi mở web.
      * ======================================================
      */
 
@@ -1558,6 +1685,7 @@ function initClosingGallery() {
                 {
                     rootMargin:
                         "800px 0px 800px 0px",
+
                     threshold: 0
                 }
             );
@@ -1569,21 +1697,24 @@ function initClosingGallery() {
     } else {
 
         /*
-         * Fallback an toàn nếu HTML không có Wishes.
-         * Vẫn không tạo gallery DOM ở page load.
+         * Fallback nếu HTML không có Wishes.
          */
+
         preloadImages();
 
     }
 
+
     /*
      * ======================================================
-     * SHOW CLOSING GALLERY
+     * PREPARE CLOSING GALLERY
      *
-     * Khi section tiến gần viewport,
-     * tạo DOM và chạy animation ngay.
+     * Hiện tại là 300px.
      *
-     * Không chờ ảnh load/decode.
+     * Đổi thành 700px để DOM được tạo sớm hơn,
+     * trong lúc người dùng vẫn còn ở section trước.
+     *
+     * Animation vẫn CHƯA chạy.
      * ======================================================
      */
 
@@ -1600,14 +1731,13 @@ function initClosingGallery() {
                             return;
                         }
 
-                        /*
-                         * Nếu người dùng scroll rất nhanh,
-                         * preload có thể chưa hoàn thành.
-                         *
-                         * Vẫn initialize ngay để không tạo
-                         * màn hình trắng chờ Promise.
-                         */
                         initializeGallery();
+
+                        /*
+                         * DOM đã được chuẩn bị.
+                         * Chờ tới lần observer tiếp theo
+                         * của cùng section để animation chạy.
+                         */
 
                         sectionObserver.unobserve(
                             section
@@ -1619,7 +1749,8 @@ function initClosingGallery() {
             },
             {
                 rootMargin:
-                    "300px 0px 300px 0px",
+                    "700px 0px 700px 0px",
+
                 threshold: 0
             }
         );
@@ -1628,8 +1759,68 @@ function initClosingGallery() {
         section
     );
 
-}
 
+    /*
+     * ======================================================
+     * START ANIMATION KHI SECTION THỰC SỰ ĐẾN GẦN
+     *
+     * Dùng observer riêng để tách:
+     *
+     * PREPARE DOM
+     *       ↓
+     * LOAD + DECODE
+     *       ↓
+     * USER ĐẾN SECTION
+     *       ↓
+     * START ANIMATION
+     *
+     * ======================================================
+     */
+
+    const animationObserver =
+        new IntersectionObserver(
+            (entries) => {
+
+                entries.forEach(
+                    (entry) => {
+
+                        if (
+                            !entry.isIntersecting
+                        ) {
+                            return;
+                        }
+
+                        /*
+                         * Nếu DOM chưa được chuẩn bị
+                         * vì user scroll quá nhanh,
+                         * chuẩn bị ngay để tránh blank.
+                         */
+
+                        initializeGallery();
+
+                        startAnimation();
+
+                        animationObserver.unobserve(
+                            section
+                        );
+
+                    }
+                );
+
+            },
+            {
+                rootMargin:
+                    "100px 0px 100px 0px",
+
+                threshold: 0
+            }
+        );
+
+    animationObserver.observe(
+        section
+    );
+
+}
 
 /* ==========================================================
    RSVP
