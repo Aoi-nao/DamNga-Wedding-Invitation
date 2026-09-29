@@ -7300,7 +7300,7 @@ footer.footer-text-visible .footer-date {
 
     opacity: 0;
 
-    will-change: auto;
+    will-change: transform;
 
     animation: none;
 
