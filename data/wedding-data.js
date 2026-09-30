@@ -49,7 +49,7 @@ const WeddingData = {
 },
 
     hero: {
-    image: "assets/images/hero.JPG"
+    image: "assets/images/hero.jpg"
     },
 
   invitation: {
