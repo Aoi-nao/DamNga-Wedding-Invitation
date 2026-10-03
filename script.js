@@ -894,11 +894,17 @@ function renderGallery() {
              * Resource sau khi đã tải vẫn nằm trong
              * browser cache nếu còn khả dụng.
              */
-            image.loading =
-                "lazy";
+            const isWebKit =
+    /AppleWebKit/i.test(navigator.userAgent) &&
+    !/Android/i.test(navigator.userAgent);
 
-            image.decoding =
-                "async";
+image.loading =
+    isWebKit
+        ? "eager"
+        : "lazy";
+
+image.decoding =
+    "async";
 
             /*
              * Lấy đúng tỷ lệ từ ảnh gốc.
@@ -1226,14 +1232,57 @@ function initGalleryAnimation() {
 
                     } else {
 
-                        const decodePromise =
-                            typeof image.decode === "function"
-                                ? image.decode()
-                                : Promise.resolve();
+                       const waitForImage = () => {
 
-                        decodePromise
-                            .then(reveal)
-                            .catch(reveal);
+    if (
+        image.complete &&
+        image.naturalWidth > 0
+    ) {
+        if (
+            typeof image.decode === "function"
+        ) {
+            return image
+                .decode()
+                .catch(() => {});
+        }
+
+        return Promise.resolve();
+    }
+
+    return new Promise((resolve) => {
+
+        const handleLoad = () => {
+
+            if (
+                typeof image.decode === "function"
+            ) {
+                image
+                    .decode()
+                    .catch(() => {})
+                    .finally(resolve);
+            } else {
+                resolve();
+            }
+
+        };
+
+        image.addEventListener(
+            "load",
+            handleLoad,
+            { once: true }
+        );
+
+        image.addEventListener(
+            "error",
+            resolve,
+            { once: true }
+        );
+
+    });
+
+};
+
+waitForImage().then(reveal);
 
                     }
 
